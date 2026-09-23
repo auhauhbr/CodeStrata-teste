@@ -1,0 +1,24 @@
+name: Detector request
+description: Propose support for another technology or ecosystem
+title: "detector: "
+labels: ["enhancement", "detector"]
+body:
+  - type: input
+    id: technology
+    attributes:
+      label: Technology
+      placeholder: Svelte
+    validations:
+      required: true
+  - type: textarea
+    id: strong
+    attributes:
+      label: Strong evidence
+      description: Which manifest dependency, config file, or other deterministic signal confirms it?
+    validations:
+      required: true
+  - type: textarea
+    id: weak
+    attributes:
+      label: Supporting evidence
+      description: Optional imports, source signatures, file names, or lockfile signals.
