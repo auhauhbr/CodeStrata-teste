@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 
 from . import __version__
 from .analyzer import Archaeologist
@@ -9,12 +10,14 @@ from .console import render_report, render_snapshot
 from .detectors import default_detectors
 from .exporters import write_html, write_json
 from .git import GitError, open_repository
+from .wayback import WaybackError
+from .website_analyzer import WebsiteArchaeologist
 
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="codestrata",
-        description="Reconstruct technology timelines from Git history.",
+        description="Reconstruct technology timelines from Git history and archived websites.",
     )
     parser.add_argument("--version", action="version", version=f"CodeStrata {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -31,6 +34,16 @@ def _parser() -> argparse.ArgumentParser:
     snapshot.add_argument("source", nargs="?", default=".", help="Local path or Git URL")
     snapshot.add_argument("--ref", default="HEAD", help="Commit, tag, or branch to inspect")
     snapshot.add_argument("--min-confidence", type=int, default=40)
+
+    web = sub.add_parser("web", help="Analyze archived versions of a public website")
+    web.add_argument("url", help="Public website URL recorded by the Wayback Machine")
+    web.add_argument("--from", dest="from_year", type=int, metavar="YEAR")
+    web.add_argument("--to", dest="to_year", type=int, metavar="YEAR")
+    web.add_argument("--granularity", choices=("year", "quarter", "month"), default="year")
+    web.add_argument("--max-snapshots", type=int, default=24)
+    web.add_argument("--min-confidence", type=int, default=40)
+    web.add_argument("--json", dest="json_path", metavar="PATH", help="Write a JSON report")
+    web.add_argument("--html", dest="html_path", metavar="PATH", help="Write a standalone HTML report")
 
     sub.add_parser("detectors", help="List enabled Git repository detector modules")
     return parser
@@ -49,6 +62,26 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         _validate_confidence(args.min_confidence)
+
+        if args.command == "web":
+            if args.from_year and args.to_year and args.from_year > args.to_year:
+                raise ValueError("--from cannot be later than --to")
+            report = WebsiteArchaeologist(min_confidence=args.min_confidence).analyze(
+                args.url,
+                granularity=args.granularity,
+                max_snapshots=args.max_snapshots,
+                from_year=args.from_year,
+                to_year=args.to_year,
+            )
+            print(render_report(report))
+            if args.json_path:
+                path = write_json(report, args.json_path)
+                print(f"\nJSON report: {path}")
+            if args.html_path:
+                path = write_html(report, args.html_path)
+                print(f"HTML report: {path}")
+            return 0
+
         archaeologist = Archaeologist(min_confidence=args.min_confidence)
         with open_repository(args.source) as repository:
             if args.command == "snapshot":
@@ -68,7 +101,7 @@ def main(argv: list[str] | None = None) -> int:
                 path = write_html(report, args.html_path)
                 print(f"HTML report: {path}")
             return 0
-    except (GitError, ValueError) as exc:
+    except (GitError, WaybackError, ValueError) as exc:
         print(f"codestrata: {exc}", file=sys.stderr)
         return 2
     except KeyboardInterrupt:
