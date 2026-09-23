@@ -160,6 +160,29 @@ summary:before{{content:"+";position:absolute;margin-left:-11px;color:#777}}
 .detection li small{{text-align:right;color:#777}}
 .note{{border-top:1px solid var(--line);padding-top:6px;color:#66645f;font-size:11px}}
 footer{{border-top:1px solid var(--line);padding:8px 12px 20px;color:#75736d;font-size:10px;background:#f6f5f0}}
+@media(max-width:760px){{
+  .page{{width:100%;border-left:0;border-right:0}}
+  .utility-inner{{width:100%;padding:4px 8px;display:block}}
+  .utility nav{{margin-top:3px;gap:10px}}
+  .content{{padding:9px 8px 24px}}
+  .columns{{grid-template-columns:1fr;gap:8px}}
+  .sidebar{{order:2}}
+  .searchbar{{padding:6px 8px}}
+  .searchbar label{{display:none}}
+  .navline{{padding:5px 8px;white-space:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch}}
+  .navline a{{display:inline-block;margin-right:12px}}
+  .summaryline{{line-height:1.7}}
+  .summaryline span{{display:inline-block;margin-right:10px}}
+  .section{{margin-bottom:12px}}
+  .table-scroll{{overflow-x:auto;-webkit-overflow-scrolling:touch;border-right:1px solid var(--soft-line)}}
+  .table-scroll table{{min-width:560px}}
+  .detection-head{{display:none}}
+  summary{{grid-template-columns:minmax(0,1fr) auto;gap:8px}}
+  summary span:nth-child(2),summary span:nth-child(3){{display:none}}
+  .detection li{{grid-template-columns:1fr;gap:2px;padding:5px 0}}
+  .detection li small{{text-align:left}}
+  .snapshot-title{{gap:8px}}
+}}
 </style>
 </head>
 <body>
