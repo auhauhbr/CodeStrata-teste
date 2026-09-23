@@ -183,6 +183,15 @@ footer{{border-top:1px solid var(--line);padding:8px 12px 20px;color:#75736d;fon
   .detection li small{{text-align:left}}
   .snapshot-title{{gap:8px}}
 }}
+@media(max-width:420px){{
+  body{{font-size:11px}}
+  h1{{font-size:18px}}
+  .utility nav a:nth-child(4){{display:none}}
+  .searchbar button{{padding:0 8px}}
+  .section-title{{font-size:10px}}
+  .snapshot-title{{display:grid;grid-template-columns:1fr auto}}
+  .technical-ref{{grid-column:1/-1}}
+}}
 </style>
 </head>
 <body>
