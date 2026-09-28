@@ -9,10 +9,18 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Iterator
+from urllib.parse import urlsplit, urlunsplit
 
 
 class GitError(RuntimeError):
     pass
+
+
+def _sanitize_remote(remote: str) -> str:
+    parsed = urlsplit(remote)
+    if not parsed.scheme or not parsed.netloc or "@" not in parsed.netloc:
+        return remote
+    return urlunsplit(parsed._replace(netloc=parsed.netloc.rsplit("@", 1)[1]))
 
 
 @dataclass(slots=True, frozen=True)
@@ -53,7 +61,7 @@ class GitRepository:
     def display_name(self) -> str:
         remote = self._run("remote", "get-url", "origin", check=False)
         if remote.returncode == 0 and remote.stdout.strip():
-            return remote.stdout.strip()
+            return _sanitize_remote(remote.stdout.strip())
         return self.path.name
 
     def head_sha(self) -> str:
