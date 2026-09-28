@@ -34,11 +34,13 @@ class WaybackClient:
     def __init__(self, *, timeout: float = 20.0):
         self.timeout = timeout
 
-    def _read(self, url: str) -> bytes:
+    def _read(self, url: str, *, max_bytes: int | None = None) -> bytes:
         request = Request(url, headers={"User-Agent": self.USER_AGENT})
         try:
             with urlopen(request, timeout=self.timeout) as response:  # noqa: S310 - explicit user target
-                return response.read()
+                if max_bytes is None:
+                    return response.read()
+                return response.read(max_bytes)
         except (HTTPError, URLError, TimeoutError) as exc:
             raise WaybackError(f"Wayback request failed: {exc}") from exc
 
@@ -84,7 +86,11 @@ class WaybackClient:
         return snapshots
 
     def fetch_html(self, snapshot: WaybackSnapshot, *, max_bytes: int = 2_000_000) -> str:
-        raw = self._read(snapshot.archive_url)
-        if len(raw) > max_bytes:
-            raw = raw[:max_bytes]
+        if type(max_bytes) is not int:
+            raise TypeError("max_bytes must be an integer")
+        if max_bytes < 0:
+            raise ValueError("max_bytes must be non-negative")
+        if max_bytes == 0:
+            return ""
+        raw = self._read(snapshot.archive_url, max_bytes=max_bytes + 1)[:max_bytes]
         return raw.decode("utf-8", errors="replace")

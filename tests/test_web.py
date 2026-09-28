@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import patch
 
 from codestrata.models import EventKind
-from codestrata.wayback import WaybackSnapshot
+from codestrata.wayback import WaybackClient, WaybackSnapshot
 from codestrata.web_detector import WebsiteDetector
 from codestrata.website_analyzer import WebsiteArchaeologist
 
@@ -30,6 +31,79 @@ class FakeWaybackClient:
 
     def fetch_html(self, snapshot: WaybackSnapshot, *, max_bytes: int = 2_000_000) -> str:
         return self.pages[snapshot.timestamp]
+
+
+class FakeResponse:
+    def __init__(self, content: bytes):
+        self.content = content
+        self.read_sizes: list[int | None] = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        return False
+
+    def read(self, size: int | None = None) -> bytes:
+        self.read_sizes.append(size)
+        if size is None:
+            return self.content
+        return self.content[:size]
+
+
+class WaybackClientTests(unittest.TestCase):
+    snapshot = WaybackSnapshot("20240102030405", "https://example.test/", "digest")
+
+    def fetch(self, content: bytes, *, max_bytes: int) -> tuple[str, FakeResponse]:
+        response = FakeResponse(content)
+        with patch("codestrata.wayback.urlopen", return_value=response):
+            html = WaybackClient().fetch_html(self.snapshot, max_bytes=max_bytes)
+        return html, response
+
+    def test_fetch_html_returns_content_below_limit(self):
+        html, response = self.fetch(b"abcdef", max_bytes=10)
+        self.assertEqual(html, "abcdef")
+        self.assertEqual(response.read_sizes, [11])
+
+    def test_fetch_html_limits_response_read(self):
+        html, response = self.fetch(b"abcdefghij", max_bytes=5)
+        self.assertEqual(html, "abcde")
+        self.assertEqual(response.read_sizes, [6])
+
+    def test_fetch_html_replaces_invalid_utf8(self):
+        html, _ = self.fetch(b"abc\xffdef", max_bytes=10)
+        self.assertEqual(html, "abc\ufffddef")
+
+    def test_fetch_html_preserves_content_at_exact_limit(self):
+        html, response = self.fetch(b"abcdef", max_bytes=6)
+        self.assertEqual(html, "abcdef")
+        self.assertEqual(response.read_sizes, [7])
+
+    def test_fetch_html_accepts_zero_limit(self):
+        with patch("codestrata.wayback.urlopen") as mocked_urlopen:
+            html = WaybackClient().fetch_html(self.snapshot, max_bytes=0)
+        self.assertEqual(html, "")
+        mocked_urlopen.assert_not_called()
+
+    def test_fetch_html_rejects_negative_limit_without_request(self):
+        with patch("codestrata.wayback.urlopen") as mocked_urlopen:
+            with self.assertRaisesRegex(ValueError, "max_bytes must be non-negative"):
+                WaybackClient().fetch_html(self.snapshot, max_bytes=-1)
+        mocked_urlopen.assert_not_called()
+
+    def test_fetch_html_rejects_non_integer_limit_without_request(self):
+        with patch("codestrata.wayback.urlopen") as mocked_urlopen:
+            with self.assertRaisesRegex(TypeError, "max_bytes must be an integer"):
+                WaybackClient().fetch_html(self.snapshot, max_bytes=1.5)  # type: ignore[arg-type]
+        mocked_urlopen.assert_not_called()
+
+    def test_fetch_html_rejects_boolean_limit_without_request(self):
+        with patch("codestrata.wayback.urlopen") as mocked_urlopen:
+            for max_bytes in (True, False):
+                with self.subTest(max_bytes=max_bytes):
+                    with self.assertRaisesRegex(TypeError, "max_bytes must be an integer"):
+                        WaybackClient().fetch_html(self.snapshot, max_bytes=max_bytes)
+        mocked_urlopen.assert_not_called()
 
 
 class WebsiteDetectorTests(unittest.TestCase):
