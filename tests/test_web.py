@@ -107,6 +107,20 @@ class WaybackClientTests(unittest.TestCase):
 
 
 class WebsiteDetectorTests(unittest.TestCase):
+    def test_does_not_detect_technology_names_in_visible_text(self):
+        html = """
+        <html><body>
+        <p>We migrated from jQuery to React and replaced Bootstrap in our WordPress site.</p>
+        </body></html>
+        """
+        detections = {item.name for item in WebsiteDetector().detect(html, "https://example.test")}
+        self.assertTrue({"jQuery", "React", "Bootstrap", "WordPress"}.isdisjoint(detections))
+
+    def test_does_not_detect_technology_names_in_irrelevant_attributes(self):
+        html = '<p title="jQuery React Bootstrap WordPress">Migration article</p>'
+        detections = {item.name for item in WebsiteDetector().detect(html, "https://example.test")}
+        self.assertTrue({"jQuery", "React", "Bootstrap", "WordPress"}.isdisjoint(detections))
+
     def test_detects_legacy_frontend_and_flash(self):
         html = '''
         <script src="https://cdn.test/jquery-1.12.4.min.js"></script>
@@ -118,11 +132,31 @@ class WebsiteDetectorTests(unittest.TestCase):
         self.assertEqual(detections["Bootstrap"].version, "3.3.7")
         self.assertIn("Adobe Flash", detections)
 
+    def test_detects_wordpress_generator_and_version(self):
+        html = '<meta name="generator" content="WordPress 6.4.2">'
+        detections = {item.name: item for item in WebsiteDetector().detect(html, "https://example.test")}
+        self.assertEqual(detections["WordPress"].version, "6.4.2")
+
     def test_detects_modern_framework_markers(self):
         html = '<script id="__NEXT_DATA__">{}</script><script src="/_next/static/react-dom.js"></script>'
         detections = {item.name for item in WebsiteDetector().detect(html, "https://example.test")}
         self.assertIn("Next.js", detections)
         self.assertIn("React", detections)
+
+    def test_detects_angular_and_vue_structural_markers(self):
+        cases = (
+            ('<main ng-version="17.0.0"></main>', "Angular", "17.0.0"),
+            ('<main ng-app="legacy"></main>', "AngularJS", None),
+            ('<main data-v-a1b2c3></main>', "Vue", None),
+        )
+        for html, technology, version in cases:
+            with self.subTest(technology=technology):
+                detections = {
+                    item.name: item
+                    for item in WebsiteDetector().detect(html, "https://example.test")
+                }
+                self.assertIn(technology, detections)
+                self.assertEqual(detections[technology].version, version)
 
 
 class WebsiteArchaeologistTests(unittest.TestCase):
