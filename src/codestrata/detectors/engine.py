@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from ..models import Evidence, TechnologyDetection
+from ..models import Evidence, TechnologyDetection, select_evidence_version
 from .base import DetectionContext, Detector
 
 
@@ -55,14 +55,12 @@ class DetectionEngine:
         detections: list[TechnologyDetection] = []
         for technology, evidence in grouped.items():
             confidence = min(100, sum(item.weight for item in evidence))
-            versions = [item.version for item in evidence if item.version]
-            version = versions[0] if versions else None
             detections.append(
                 TechnologyDetection(
                     name=technology,
                     category=CATEGORY_BY_TECHNOLOGY.get(technology, "other"),
                     confidence=confidence,
-                    version=version,
+                    version=select_evidence_version(evidence),
                     evidence=sorted(evidence, key=lambda item: item.weight, reverse=True),
                 )
             )

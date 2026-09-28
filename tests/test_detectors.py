@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 from codestrata.detectors import DetectionContext, DetectionEngine, default_detectors
+from codestrata.models import Evidence, EvidenceKind
 
 
 class FakeRepository:
@@ -18,7 +19,88 @@ def detect(files: dict[str, str]):
     return {item.name: item for item in DetectionEngine(default_detectors()).run(context)}
 
 
+class StaticDetector:
+    name = "static"
+
+    def __init__(self, evidence: list[Evidence]):
+        self.evidence = evidence
+
+    def detect(self, context: DetectionContext) -> list[Evidence]:
+        return self.evidence
+
+
+def aggregate(evidence: list[Evidence]):
+    context = DetectionContext(FakeRepository({}), "HEAD", [])  # type: ignore[arg-type]
+    return DetectionEngine([StaticDetector(evidence)]).run(context)[0]
+
+
 class DetectorTests(unittest.TestCase):
+    def test_stronger_evidence_version_wins(self):
+        detection = aggregate(
+            [
+                Evidence("React", EvidenceKind.SOURCE, "src/app.js", "source", 20, "^17"),
+                Evidence("React", EvidenceKind.MANIFEST, "package.json", "manifest", 80, "^18"),
+            ]
+        )
+        self.assertEqual(detection.version, "^18")
+
+    def test_version_selection_does_not_depend_on_input_order(self):
+        evidence = [
+            Evidence("React", EvidenceKind.MANIFEST, "z/package.json", "manifest", 80, "^17"),
+            Evidence("React", EvidenceKind.MANIFEST, "a/package.json", "manifest", 80, "^18"),
+        ]
+        self.assertEqual(aggregate(evidence).version, "^18")
+        self.assertEqual(aggregate(list(reversed(evidence))).version, "^18")
+
+    def test_version_tie_uses_evidence_kind_priority(self):
+        priority = [
+            EvidenceKind.LOCKFILE,
+            EvidenceKind.MANIFEST,
+            EvidenceKind.CONFIG,
+            EvidenceKind.FILE,
+            EvidenceKind.SOURCE,
+        ]
+        for preferred, other in zip(priority, priority[1:]):
+            with self.subTest(preferred=preferred, other=other):
+                detection = aggregate(
+                    [
+                        Evidence("React", other, "a", "other", 50, "other"),
+                        Evidence("React", preferred, "z", "preferred", 50, "preferred"),
+                    ]
+                )
+                self.assertEqual(detection.version, "preferred")
+
+    def test_complete_version_tie_is_deterministic(self):
+        evidence = [
+            Evidence("React", EvidenceKind.MANIFEST, "package.json", "manifest", 80, "^18"),
+            Evidence("React", EvidenceKind.MANIFEST, "package.json", "manifest", 80, "^17"),
+        ]
+        versions = {
+            aggregate(evidence).version,
+            aggregate(list(reversed(evidence))).version,
+        }
+        self.assertEqual(versions, {"^17"})
+
+    def test_evidence_without_version_still_contributes_to_confidence(self):
+        detection = aggregate(
+            [
+                Evidence("React", EvidenceKind.MANIFEST, "package.json", "manifest", 60, "^18"),
+                Evidence("React", EvidenceKind.SOURCE, "app.js", "source", 30),
+            ]
+        )
+        self.assertEqual(detection.version, "^18")
+        self.assertEqual(detection.confidence, 90)
+
+    def test_no_version_remains_none_and_confidence_is_capped(self):
+        detection = aggregate(
+            [
+                Evidence("React", EvidenceKind.MANIFEST, "package.json", "manifest", 80),
+                Evidence("React", EvidenceKind.SOURCE, "app.js", "source", 40),
+            ]
+        )
+        self.assertIsNone(detection.version)
+        self.assertEqual(detection.confidence, 100)
+
     def test_detects_react_typescript_vite_and_npm(self):
         detections = detect(
             {

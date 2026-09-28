@@ -30,6 +30,33 @@ class Evidence:
     version: str | None = None
 
 
+VERSION_KIND_PRIORITY = {
+    EvidenceKind.LOCKFILE: 5,
+    EvidenceKind.MANIFEST: 4,
+    EvidenceKind.CONFIG: 3,
+    EvidenceKind.FILE: 2,
+    EvidenceKind.SOURCE: 1,
+}
+
+
+def select_evidence_version(evidence: list[Evidence]) -> str | None:
+    """Select by highest weight/kind priority, then lowest path/version text."""
+    candidates = [item for item in evidence if item.version]
+    if not candidates:
+        return None
+    selected = min(
+        candidates,
+        key=lambda item: (
+            -item.weight,
+            -VERSION_KIND_PRIORITY[item.kind],
+            item.path,
+            item.version or "",
+            item.detail,
+        ),
+    )
+    return selected.version
+
+
 @dataclass(slots=True)
 class TechnologyDetection:
     name: str

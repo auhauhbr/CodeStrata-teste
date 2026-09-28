@@ -4,7 +4,7 @@ import re
 from collections import defaultdict
 from html.parser import HTMLParser
 
-from .models import Evidence, EvidenceKind, TechnologyDetection
+from .models import Evidence, EvidenceKind, TechnologyDetection, select_evidence_version
 
 
 WEB_CATEGORIES = {
@@ -158,13 +158,12 @@ class WebsiteDetector:
 
         detections: list[TechnologyDetection] = []
         for technology, items in grouped.items():
-            versions = [item.version for item in items if item.version]
             detections.append(
                 TechnologyDetection(
                     name=technology,
                     category=WEB_CATEGORIES.get(technology, "other"),
                     confidence=min(100, sum(item.weight for item in items)),
-                    version=versions[0] if versions else None,
+                    version=select_evidence_version(items),
                     evidence=items,
                 )
             )
