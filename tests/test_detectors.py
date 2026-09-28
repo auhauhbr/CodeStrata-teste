@@ -56,6 +56,92 @@ class DetectorTests(unittest.TestCase):
         self.assertEqual(detections["FastAPI"].confidence, 100)
         self.assertEqual(detections["FastAPI"].version, "==0.115.0")
 
+    def test_ignores_python_framework_names_in_pyproject_description(self):
+        detections = detect(
+            {
+                "pyproject.toml": '''
+[project]
+name = "demo"
+description = "Migrating away from Django and Flask"
+dependencies = []
+''',
+            }
+        )
+        self.assertNotIn("Django", detections)
+        self.assertNotIn("Flask", detections)
+
+    def test_detects_pep621_dependencies_with_constraints(self):
+        detections = detect(
+            {
+                "pyproject.toml": '''
+[project]
+dependencies = [
+  "Django>=5.1",
+  "fastapi==0.115.0",
+]
+''',
+            }
+        )
+        self.assertEqual(detections["Django"].version, ">=5.1")
+        self.assertEqual(detections["FastAPI"].version, "==0.115.0")
+
+    def test_detects_pep621_optional_dependencies(self):
+        detections = detect(
+            {
+                "pyproject.toml": '''
+[project.optional-dependencies]
+test = ["Flask>=3"]
+''',
+            }
+        )
+        self.assertEqual(detections["Flask"].version, ">=3")
+
+    def test_detects_poetry_dependencies_and_groups(self):
+        detections = detect(
+            {
+                "pyproject.toml": '''
+[tool.poetry.dependencies]
+python = "^3.11"
+django = "^5.1"
+
+[tool.poetry.group.dev.dependencies]
+flask = "^3.0"
+''',
+            }
+        )
+        self.assertEqual(detections["Django"].version, "^5.1")
+        self.assertEqual(detections["Flask"].version, "^3.0")
+
+    def test_detects_pipfile_packages(self):
+        detections = detect(
+            {
+                "Pipfile": '''
+[packages]
+flask = "==3.0.0"
+''',
+            }
+        )
+        self.assertEqual(detections["Flask"].version, "==3.0.0")
+
+    def test_ignores_requirements_comments(self):
+        detections = detect(
+            {
+                "requirements.txt": "# project migrated from Django\nfastapi==0.115.0\n",
+            }
+        )
+        self.assertNotIn("Django", detections)
+        self.assertEqual(detections["FastAPI"].version, "==0.115.0")
+
+    def test_ignores_invalid_python_toml_manifests(self):
+        detections = detect(
+            {
+                "pyproject.toml": '[project\ndescription = "Django"',
+                "Pipfile": '[packages\nflask = "==3.0"',
+            }
+        )
+        self.assertNotIn("Django", detections)
+        self.assertNotIn("Flask", detections)
+
     def test_source_signature_is_lower_confidence_than_manifest(self):
         detections = detect({"legacy.js": '$("#dialog").show();'})
         self.assertEqual(detections["jQuery"].confidence, 20)
